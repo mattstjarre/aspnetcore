@@ -146,9 +146,7 @@ param(
 
     [switch]$NoBuildRepoTasks,
 
-    # By default, Windows builds will use MSBuild.exe. Passing this will force the build to run on
-    # dotnet.exe instead, which may cause issues if you invoke build on a project unsupported by
-    # MSBuild for .NET Core
+    # Disable pre-build of AspNetCoreModuleV2 C++ code in x64 (default) and x86 builds.
     [switch]$ForceCoreMsbuild,
 
     # Diagnostics
@@ -186,9 +184,12 @@ if ($DumpProcesses -or $CI) {
     Start-Job -Name DumpProcesses -FilePath $PSScriptRoot\eng\scripts\dump_process.ps1 -ArgumentList $PSScriptRoot
 }
 
+$prebuildArguments=$MSBuildArguments
+
 # Project selection
 if ($All) {
     $MSBuildArguments += '/p:BuildAllProjects=true'
+    $prebuildArguments += "/p:BuildNative=true"
 }
 
 if ($Projects) {
@@ -197,6 +198,7 @@ if ($Projects) {
         $Projects = Join-Path (Get-Location) $Projects
     }
     $MSBuildArguments += "/p:ProjectToBuild=$Projects"
+    $prebuildArguments += "/p:ProjectToBuild=$Projects"
 }
 # When adding new sub-group build flags, add them to this check.
 elseif (-not ($All -or $BuildNative -or $BuildManaged -or $BuildNodeJS -or $BuildInstallers -or $BuildJava)) {
@@ -227,17 +229,34 @@ if ($BuildManaged -or ($All -and (-not $NoBuildManaged))) {
     }
 }
 
-if ($BuildInstallers) { $MSBuildArguments += "/p:BuildInstallers=true" }
+if ($BuildInstallers) {
+    $MSBuildArguments += "/p:BuildInstallers=true"
+    $prebuildArguments += "/p:BuildInstallers=true"
+}
 if ($BuildManaged) { $MSBuildArguments += "/p:BuildManaged=true" }
-if ($BuildNative) { $MSBuildArguments += "/p:BuildNative=true" }
+if ($BuildNative) {
+    $MSBuildArguments += "/p:BuildNative=true"
+    $prebuildArguments += "/p:BuildNative=true"
+}
 if ($BuildNodeJS) { $MSBuildArguments += "/p:BuildNodeJS=true" }
 if ($BuildJava) { $MSBuildArguments += "/p:BuildJava=true" }
 
-if ($NoBuildDeps) { $MSBuildArguments += "/p:BuildProjectReferences=false" }
+if ($NoBuildDeps) {
+    $MSBuildArguments += "/p:BuildProjectReferences=false"
+    $prebuildArguments += "/p:BuildProjectReferences=false"
+}
 
-if ($NoBuildInstallers) { $MSBuildArguments += "/p:BuildInstallers=false" }
+if ($NoBuildInstallers) {
+    $MSBuildArguments += "/p:BuildInstallers=false"
+    $prebuildArguments += "/p:BuildInstallers=false"
+}
 if ($NoBuildManaged) { $MSBuildArguments += "/p:BuildManaged=false" }
-if ($NoBuildNative) { $MSBuildArguments += "/p:BuildNative=false" }
+if ($NoBuildNative) {
+    $MSBuildArguments += "/p:BuildNative=false"
+
+    # Don't bother with prebuild if `dotnet msbuild` can handle everything.
+    if ($noBuildNative) { $ForceCoreMsbuild = $true }
+}
 if ($NoBuildNodeJS) { $MSBuildArguments += "/p:BuildNodeJS=false" }
 if ($NoBuildJava) { $MSBuildArguments += "/p:BuildJava=false" }
 
@@ -252,21 +271,30 @@ $RunRestore = if ($NoRestore) { $false }
 
 # Target selection
 $MSBuildArguments += "/p:Restore=$RunRestore"
+$prebuildArguments += "/p:Restore=$RunRestore"
 $MSBuildArguments += "/p:Build=$RunBuild"
+$prebuildArguments += "/p:Build=$RunBuild"
 if (-not $RunBuild) {
     $MSBuildArguments += "/p:NoBuild=true"
+    $prebuildArguments += "/p:NoBuild=true"
 }
 $MSBuildArguments += "/p:Pack=$Pack"
+$prebuildArguments += "/p:Pack=$Pack"
 $MSBuildArguments += "/p:Test=$Test"
+$prebuildArguments += "/p:Test=$Test"
 $MSBuildArguments += "/p:Sign=$Sign"
+$prebuildArguments += "/p:Sign=$Sign"
 
 $MSBuildArguments += "/p:TargetArchitecture=$Architecture"
+$prebuildArguments += "/p:TargetArchitecture=$Architecture"
 $MSBuildArguments += "/p:TargetOsName=win"
+$prebuildArguments += "/p:TargetOsName=win"
 
 if (-not $Configuration) {
     $Configuration = if ($CI) { 'Release' } else { 'Debug' }
 }
 $MSBuildArguments += "/p:Configuration=$Configuration"
+$prebuildArguments += "/p:Configuration=$Configuration"
 
 [string[]]$ToolsetBuildArguments = @()
 if ($DotNetRuntimeSourceFeed -or $DotNetRuntimeSourceFeedKey) {
@@ -274,6 +302,8 @@ if ($DotNetRuntimeSourceFeed -or $DotNetRuntimeSourceFeedKey) {
     $runtimeFeedKeyArg = "/p:DotNetRuntimeSourceFeedKey=$DotNetRuntimeSourceFeedKey"
     $MSBuildArguments += $runtimeFeedArg
     $MSBuildArguments += $runtimeFeedKeyArg
+    $prebuildArguments += $runtimeFeedArg
+    $prebuildArguments += $runtimeFeedKeyArg
     $ToolsetBuildArguments += $runtimeFeedArg
     $ToolsetBuildArguments += $runtimeFeedKeyArg
 }
@@ -345,9 +375,8 @@ $env:MSBUILDDISABLENODEREUSE=1
 # Fixing this is tracked by https://github.com/dotnet/aspnetcore-internal/issues/601
 $warnAsError = $false
 
-if ($ForceCoreMsbuild) {
-    $msbuildEngine = 'dotnet'
-}
+# Use `dotnet msbuild` by default
+$msbuildEngine = 'dotnet'
 
 # tools.ps1 corrupts global state, so reset these values in case they carried over from a previous build
 Remove-Item variable:global:_BuildTool -ea Ignore
@@ -357,6 +386,12 @@ Remove-Item variable:global:_MSBuildExe -ea Ignore
 
 # Import Arcade
 . "$PSScriptRoot/eng/common/tools.ps1"
+# Don't bother with `dotnet msbuild` if "prebuild" will build everything.
+$skipFinalBuild = -not $ForceCoreMsbuild -and ([string]::Join(' ', $prebuildArguments) -ceq [string]::Join(' ', $MSBuildArguments))
+
+if ($BinaryLog -and !$skipFinalBuild) {
+    $prebuildArguments += "/bl:$LogDir/PreBuild.binlog"
+}
 
 # Capture MSBuild crash logs
 $env:MSBUILDDEBUGPATH = $LogDir
@@ -395,9 +430,28 @@ try {
             @ToolsetBuildArguments
     }
 
-    MSBuild $toolsetBuildProj `
-        /p:RepoRoot=$RepoRoot `
-        @MSBuildArguments
+    if (-not $ForceCoreMsbuild) {
+        Remove-Item variable:global:_BuildTool
+        $msbuildEngine = 'vs'
+
+        # This build may write to a binary log the next one will overwite if user specified /bl:filename.binlog.
+        MSBuild $toolsetBuildProj `
+            /p:RepoRoot=$RepoRoot `
+            /p:BuildNative=true `
+            /clp:NoSummary `
+            @prebuildArguments
+    }
+
+    if (-not $skipFinalBuild) {
+        if (-not $ForceCoreMsbuild) {
+            Remove-Item variable:global:_BuildTool
+        }
+        $msbuildEngine = 'dotnet'
+
+        MSBuild $toolsetBuildProj `
+            /p:RepoRoot=$RepoRoot `
+            @MSBuildArguments
+    }
 }
 catch {
     Write-Host $_.ScriptStackTrace
