@@ -31,11 +31,6 @@ namespace Microsoft.AspNetCore.Authentication.OAuth
                 throw new ArgumentException(string.Format(CultureInfo.CurrentCulture, Resources.Exception_OptionMustBeProvided, nameof(ClientId)), nameof(ClientId));
             }
 
-            if (string.IsNullOrEmpty(ClientSecret))
-            {
-                throw new ArgumentException(string.Format(CultureInfo.CurrentCulture, Resources.Exception_OptionMustBeProvided, nameof(ClientSecret)), nameof(ClientSecret));
-            }
-
             if (string.IsNullOrEmpty(AuthorizationEndpoint))
             {
                 throw new ArgumentException(string.Format(CultureInfo.CurrentCulture, Resources.Exception_OptionMustBeProvided, nameof(AuthorizationEndpoint)), nameof(AuthorizationEndpoint));
