@@ -53,6 +53,11 @@ namespace Microsoft.AspNetCore.Authentication.OAuth
         public string ClientId { get; set; }
 
         /// <summary>
+        /// Gets or sets the access_type.
+        /// </summary>
+        public string AccessType { get; set; }
+
+        /// <summary>
         /// Gets or sets the provider-assigned client secret.
         /// </summary>
         public string ClientSecret { get; set; }

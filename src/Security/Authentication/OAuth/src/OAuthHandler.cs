@@ -177,6 +177,7 @@ namespace Microsoft.AspNetCore.Authentication.OAuth
         {
             var tokenRequestParameters = new Dictionary<string, string>()
             {
+                { OAuthChallengeProperties.AccessTypeKey, Options.AccessType },
                 { "client_id", Options.ClientId },
                 { "redirect_uri", context.RedirectUri },
                 { "client_secret", Options.ClientSecret },
@@ -265,6 +266,7 @@ namespace Microsoft.AspNetCore.Authentication.OAuth
 
             var parameters = new Dictionary<string, string>
             {
+                { OAuthChallengeProperties.AccessTypeKey, Options.AccessType },
                 { "client_id", Options.ClientId },
                 { "scope", scope },
                 { "response_type", "code" },

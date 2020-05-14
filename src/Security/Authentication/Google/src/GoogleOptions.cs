@@ -32,10 +32,5 @@ namespace Microsoft.AspNetCore.Authentication.Google
             ClaimActions.MapJsonKey("urn:google:profile", "link");
             ClaimActions.MapJsonKey(ClaimTypes.Email, "email");
         }
-
-        /// <summary>
-        /// access_type. Set to 'offline' to request a refresh token.
-        /// </summary>
-        public string AccessType { get; set; }
     }
 }

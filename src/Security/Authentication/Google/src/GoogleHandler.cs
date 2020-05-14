@@ -58,7 +58,7 @@ namespace Microsoft.AspNetCore.Authentication.Google
             queryStrings.Add("redirect_uri", redirectUri);
 
             AddQueryString(queryStrings, properties, GoogleChallengeProperties.ScopeKey, FormatScope, Options.Scope);
-            AddQueryString(queryStrings, properties, GoogleChallengeProperties.AccessTypeKey, Options.AccessType);
+            AddQueryString(queryStrings, properties, OAuthChallengeProperties.AccessTypeKey, Options.AccessType);
             AddQueryString(queryStrings, properties, GoogleChallengeProperties.ApprovalPromptKey);
             AddQueryString(queryStrings, properties, GoogleChallengeProperties.PromptParameterKey);
             AddQueryString(queryStrings, properties, GoogleChallengeProperties.LoginHintKey);

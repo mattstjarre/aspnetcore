@@ -5,6 +5,11 @@ namespace Microsoft.AspNetCore.Authentication.OAuth
     public class OAuthChallengeProperties : AuthenticationProperties
     {
         /// <summary>
+        /// The parameter key for the "access_type" argument being used for a challenge request.
+        /// </summary>
+        public static readonly string AccessTypeKey = "access_type";
+
+        /// <summary>
         /// The parameter key for the "scope" argument being used for a challenge request.
         /// </summary>
         public static readonly string ScopeKey = "scope";
